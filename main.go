@@ -37,8 +37,15 @@ func genNickEvent(nick string) string {
     return string(str)
 }
 
+func reply(message string, thisMessage map[string]interface{}, conn *websocket.Conn) {
+    id := thisMessage["data"].(map[string]interface{})["id"].(string)
+    response := fmt.Sprintf("{\"type\": \"send\", \"data\": {\"content\": \"%s\", \"parent\": \"%s\"}}", message, id)
+    err := conn.WriteMessage(websocket.TextMessage, []byte(response))
+    if err != nil { panic(err) }
+}
+
 func main() {
-    u := url.URL{Scheme: "wss", Host: "euphoria.io", Path: "/room/test/ws"}
+    u := url.URL{Scheme: "wss", Host: "euphoria.io", Path: "/room/xkcd/ws"}
 
     conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
     if err != nil { panic(err) }
@@ -62,17 +69,31 @@ func main() {
             if err != nil { panic(err) }
         case "snapshot-event":
             //Hello!
-            response := genNickEvent("Pouncy Silverbot")
+            response := genNickEvent("TimerBot")
             err := conn.WriteMessage(websocket.TextMessage, []byte(response))
             if err != nil { panic(err) }
         case "send-event":
             content := thisMessage["data"].(map[string]interface{})["content"]
-            if strings.Fields(content.(string))[0] == "!timer" {
+
+            //Handles botrulez
+            switch content{
+            case "!help":
+                reply("I offer timers! Use !timer <minutes>. Courtesy of Pouncy.", thisMessage, conn)
+            case "!help @TimerBot":
+                reply("I was written by Pouncy to offer timers. Use !timer <minutes> to be pinged after <minutes>.", thisMessage, conn)
+            case "!ping":
+                reply("Pong!", thisMessage, conn)
+            case "!ping @TimerBot":
+                reply("Pong!", thisMessage, conn)
+            case "!kill @TimerBot":
+                panic("Killed!")
+            }
+
+            //Handles timer requests
+            if len(strings.Fields(content.(string))) > 1 && strings.Fields(content.(string))[0] == "!timer" {
                 duration, err := strconv.Atoi(strings.Fields(content.(string))[1])
-                if err != nil || duration < 1 {
-                    id := thisMessage["data"].(map[string]interface{})["id"].(string)
-                    response := "{\"type\": \"send\", \"data\": {\"content\": \"Sorry, I couldn't parse that request\", \"parent\": \"" + id + "\"}}"
-                    err = conn.WriteMessage(websocket.TextMessage, []byte(response))
+                if err != nil || duration < 1 || duration > 1440 {
+                    reply("Sorry, I couldn't parse that request!", thisMessage, conn)
                 } else {
                     sender := thisMessage["data"].(map[string]interface{})["sender"].(map[string]interface{})["name"].(string)
                     go func(duration int, sender string, timers chan string) {
